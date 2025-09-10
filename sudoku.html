@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <h1 style="text-align: center">Sudoku</h1>
+    <div style="text-align: center; margin-bottom: 20px">
+      <button id="easyBtn">Easy</button>
+      <button id="mediumBtn">Medium</button>
+      <button id="hardBtn">Hard</button>
+    </div>
+    <div class="grid" id="board"></div>
+    <div class="numbers" id="numbers"></div>
+    <div id="timer" class="timer">Time: 00:00</div>
+  </body>
+</html>
+
+<style>
+  .timer {
+    text-align: center;
+    font-size: 24px;
+    margin: 20px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(9, 60px);
+    grid-template-rows: repeat(9, 60px);
+    gap: 0;
+    align-items: center;
+    justify-content: center;
+    margin: 50px;
+  }
+
+  .numbers {
+    display: grid;
+    grid-template-columns: repeat(9, 60px);
+    gap: 20px;
+    align-items: center;
+    justify-content: center;
+    margin: 30px;
+  }
+
+  .cell {
+    width: 60px;
+    height: 60px;
+    border: 1px solid #aaa;
+    text-align: center;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+
+  .controls {
+    width: 70px;
+    height: 70px;
+    border: 5px solid #a9dfff;
+    border-radius: 15px;
+    text-align: center;
+    font-size: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+
+  /* Thicker borders to separate 3x3 blocks */
+  .cell:nth-child(3n + 1) {
+    border-left: 3px solid black;
+  }
+  .cell:nth-child(n + 19):nth-child(-n + 27),
+  .cell:nth-child(n + 46):nth-child(-n + 54),
+  .cell:nth-child(n + 73):nth-child(-n + 81) {
+    border-bottom: 3px solid black;
+  }
+  .cell:nth-child(n):nth-child(-n + 9) {
+    border-top: 3px solid black;
+  }
+  .cell:nth-child(9n) {
+    border-right: 3px solid black;
+  }
+
+  .selected {
+    background-color: #aaa;
+  }
+
+  .readonly {
+    background-color: #eee;
+    pointer-events: none;
+    font-weight: bold;
+  }
+
+  .error {
+    background-color: #ff6666 !important;
+    transition: background 0.2s;
+  }
+
+  .correct {
+    background-color: #89ff64 !important;
+    transition: background 0.2s;
+  }
+</style>
+
+<script>
+  let board = document.getElementById("board");
+  let numbers = document.getElementById("numbers");
+  let selectedNumber = null;
+  let selectedCell = null;
+  let puzzle;
+  let solution; // Store the solved board
+  let timerStarted = false;
+  let timerInterval;
+  let secondsElapsed = 0;
+  let difficulty = "medium";
+  const difficultySettings = {
+    easy: 30,
+    medium: 40,
+    hard: 55,
+  };
+
+  function setupSudoku() {
+    board.innerHTML = "";
+    numbers.innerHTML = "";
+    timerStarted = false;
+    secondsElapsed = 0;
+    clearInterval(timerInterval);
+    document.getElementById("timer").textContent = "Time: 00:00";
+    selectedCell = null;
+
+    // Generate and store the solution
+    solution = generateSudokuSolution();
+    // Copy solution and remove numbers for the puzzle
+    puzzle = solution.map((row) => row.slice());
+    removeNumbers(puzzle, difficultySettings[difficulty]);
+
+    // Render 9x9 board
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        const cell = document.createElement("div");
+        cell.classList.add("cell");
+        const value = puzzle[row][col];
+        cell.textContent = value !== 0 ? value : "";
+        if (value !== 0) {
+          cell.classList.add("readonly");
+        }
+        cell.dataset.row = row;
+        cell.dataset.col = col;
+        board.appendChild(cell);
+      }
+    }
+
+    // Render number buttons 1-9
+    for (let index = 0; index < 9; index++) {
+      const button = document.createElement("button");
+      button.classList.add("controls");
+      button.textContent = index + 1;
+      button.onclick = () => placeNumber(index + 1);
+      numbers.appendChild(button);
+    }
+  }
+
+  window.onload = function () {
+    setupSudoku();
+  };
+
+  document.getElementById("easyBtn").onclick = function () {
+    difficulty = "easy";
+    setupSudoku();
+  };
+  document.getElementById("mediumBtn").onclick = function () {
+    difficulty = "medium";
+    setupSudoku();
+  };
+  document.getElementById("hardBtn").onclick = function () {
+    difficulty = "hard";
+    setupSudoku();
+  };
+
+  // Helper to generate a full solution board
+  function generateSudokuSolution() {
+    let board = Array.from({ length: 9 }, () => Array(9).fill(0));
+    fillBoard(board);
+    return board;
+  }
+
+  board.addEventListener("click", function (e) {
+    if (
+      e.target.classList.contains("cell") &&
+      !e.target.classList.contains("readonly")
+    ) {
+      if (selectedCell) {
+        selectedCell.classList.remove("selected");
+      }
+      selectedCell = e.target;
+      selectedCell.classList.add("selected");
+    }
+  });
+
+  function startTimer() {
+    timerInterval = setInterval(() => {
+      secondsElapsed++;
+      const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, "0");
+      const secs = String(secondsElapsed % 60).padStart(2, "0");
+      document.getElementById("timer").textContent = `Time: ${mins}:${secs}`;
+    }, 1000);
+  }
+
+  function placeNumber(num) {
+    if (selectedCell) {
+      const button = Array.from(numbers.children).find(
+        (btn) => btn.textContent == num
+      );
+      const row = Number(selectedCell.dataset.row);
+      const col = Number(selectedCell.dataset.col);
+      // Check against the solution board
+      if (solution[row][col] === num) {
+        selectedCell.textContent = num;
+        selectedNumber = num;
+        selectedCell.classList.add("readonly"); // Make cell uneditable
+        selectedCell.classList.remove("selected"); // Remove highlight
+        if (!timerStarted) {
+          timerStarted = true;
+          startTimer();
+        }
+        console.log(`Placed ${num} at (${row}, ${col})`);
+        selectedCell.classList.add("correct");
+        if (button) button.classList.add("correct");
+        setTimeout(() => {
+          selectedCell.classList.remove("correct");
+          if (button) button.classList.remove("correct");
+          selectedCell = null;
+        }, 500);
+      } else {
+        // Flash red for error
+        selectedCell.classList.add("error");
+        if (button) button.classList.add("error");
+        setTimeout(() => {
+          selectedCell.classList.remove("error");
+          if (button) button.classList.remove("error");
+        }, 500);
+        return;
+      }
+    }
+  }
+
+  function isSafe(board, row, col, num) {
+    // Row and column check
+    for (let i = 0; i < 9; i++) {
+      if (board[row][i] === num || board[i][col] === num) return false;
+    }
+
+    // 3x3 box check
+    let startRow = Math.floor(row / 3) * 3;
+    let startCol = Math.floor(col / 3) * 3;
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        if (board[startRow + r][startCol + c] === num) return false;
+      }
+    }
+
+    return true;
+  }
+
+  function shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      let j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  function fillBoard(board) {
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        if (board[row][col] === 0) {
+          let numbers = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+          for (let num of numbers) {
+            if (isSafe(board, row, col, num)) {
+              board[row][col] = num;
+              if (fillBoard(board)) return true;
+              board[row][col] = 0;
+            }
+          }
+          return false; // backtrack
+        }
+      }
+    }
+    return true; // filled successfully
+  }
+
+  function removeNumbers(board, count) {
+    while (count > 0) {
+      let row = Math.floor(Math.random() * 9);
+      let col = Math.floor(Math.random() * 9);
+      if (board[row][col] !== 0) {
+        board[row][col] = 0;
+        count--;
+      }
+    }
+  }
+
+  function generateSudoku(emptyCells = 40) {
+    let board = Array.from({ length: 9 }, () => Array(9).fill(0));
+    fillBoard(board);
+    removeNumbers(board, emptyCells);
+    return board;
+  }
+</script>
